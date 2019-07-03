@@ -70,6 +70,7 @@ public class AutoCompleteAdapter extends ArrayAdapter<String> implements Filtera
     return row;
   }
 
+  /** Returns the search term displayed in the suggestions list */
   @Override
   public String getItem(int index) {
     String a = mData.get(index);
@@ -118,8 +119,13 @@ public class AutoCompleteAdapter extends ArrayAdapter<String> implements Filtera
             String suggestion;
             String suggestionUrl;
             List<String> alreadyAdded = new ArrayList<>();
+            /** Possibly, instead of getting Url from Title, want to return url from NextSuggestion itself*/
             while ((suggestion = ZimContentProvider.getNextSuggestion()) != null) {
-              suggestionUrl = ZimContentProvider.getPageUrlFromTitle(suggestion);
+              if(suggestion.endsWith(".html"))
+                suggestionUrl = suggestion;
+              else
+                suggestionUrl = ZimContentProvider.getPageUrlFromTitle(suggestion);
+
               if (!alreadyAdded.contains(suggestionUrl)) {
                 alreadyAdded.add(suggestionUrl);
                 data.add(suggestion);

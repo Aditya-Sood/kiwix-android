@@ -234,13 +234,31 @@ public class ZimContentProvider extends ContentProvider {
     }
   }
 
-  public static String getNextSuggestion() {
+  /*public static String getNextSuggestion() {
     if (currentJNIReader == null || zimFileName == null) {
       return null;
     } else {
       JNIKiwixString title = new JNIKiwixString();
       if (currentJNIReader.getNextSuggestion(title)) {
         return title.value;
+      } else {
+        return null;
+      }
+    }
+  }*/
+
+  public static String getNextSuggestion() {
+    if (currentJNIReader == null || zimFileName == null) {
+      return null;
+    } else {
+      JNIKiwixString title = new JNIKiwixString();
+      JNIKiwixString url = new JNIKiwixString();
+      if (currentJNIReader.getNextSuggestion(title, url)) {
+        if(url.value != null)
+          return url.value;
+        else
+          return title.value;
+
       } else {
         return null;
       }

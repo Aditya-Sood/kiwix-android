@@ -24,6 +24,7 @@ import android.os.Bundle;
 import android.provider.Settings;
 import android.speech.RecognizerIntent;
 import android.text.Html;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
@@ -97,6 +98,8 @@ public class SearchActivity extends BaseActivity
     if (IS_VOICE_SEARCH_INTENT) {
       promptSpeechInput();
     }
+
+    Log.d("SearchActivity", "###############In search activity");
   }
 
   public void activateDefaultAdapter() {

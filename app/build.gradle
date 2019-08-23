@@ -20,6 +20,7 @@ buildscript {
     classpath "com.testdroid:testdroid-api:2.71"
     classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlinVersion"
     classpath "io.objectbox:objectbox-gradle-plugin:$objectboxVersion"
+    classpath "org.jlleitschuh.gradle:ktlint-gradle:8.2.0"
   }
 }
 
@@ -33,6 +34,7 @@ apply plugin: 'kotlin-android-extensions'
 apply plugin: 'kotlin-kapt'
 apply plugin: 'io.objectbox'
 apply plugin: 'jacoco-android'
+apply plugin: "org.jlleitschuh.gradle.ktlint"
 
 repositories {
   google()
@@ -55,9 +57,6 @@ dependencies {
     implementation project(":kiwixlib")
     archs = file("../kiwixlib/src/main/jniLibs").list()
   }
-
-  // Storage Devices
-  implementation "eu.mhutti1.utils.storage:android-storage-devices:0.6.2"
 
   // Android Support
   implementation "androidx.appcompat:appcompat:$appCompatVersion"
@@ -83,6 +82,7 @@ dependencies {
   androidTestImplementation "androidx.test:rules:1.2.0"
   androidTestImplementation "androidx.test:core:1.2.0"
   androidTestImplementation "com.squareup.okhttp3:mockwebserver:3.6.0"
+  androidTestUtil 'androidx.test:orchestrator:1.1.0'
   // Mockito
   androidTestImplementation "org.mockito:mockito-android:$mockitoVersion"
 
@@ -124,9 +124,7 @@ dependencies {
   implementation "io.reactivex.rxjava2:rxjava:$rxJavaVersion"
 
   // Leak canary
-  releaseImplementation 'com.squareup.leakcanary:leakcanary-android-no-op:1.6.3'
-  androidTestImplementation 'com.squareup.leakcanary:leakcanary-android-no-op:1.6.3'
-  debugImplementation 'com.squareup.leakcanary:leakcanary-android:1.6.3'
+  debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.0-alpha-2'
 
   implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk7:$kotlinVersion"
   implementation "android.arch.lifecycle:extensions:1.1.1"
@@ -153,9 +151,9 @@ if (custom.listFiles()) {
 
     def fileName = file.getName()
     if (fileName.startsWith(".") ||
-        fileName.contains("test") ||
-        fileName == "main" ||
-        fileName.contains("Test")) {
+      fileName.contains("test") ||
+      fileName == "main" ||
+      fileName.contains("Test")) {
       return
     }
     map.put(fileName, file.getAbsolutePath())
@@ -171,8 +169,8 @@ tasks.withType(Test) {
 }
 
 def branchName = System.getenv('TRAVIS_PULL_REQUEST') ?: "false" == "false"
-    ? System.getenv('TRAVIS_BRANCH') ?: "local"
-    : System.getenv('TRAVIS_PULL_REQUEST_BRANCH')
+  ? System.getenv('TRAVIS_BRANCH') ?: "local"
+  : System.getenv('TRAVIS_PULL_REQUEST_BRANCH')
 def buildNumber = System.getenv('TRAVIS_BUILD_NUMBER') ?: "dev"
 
 ext {
@@ -199,9 +197,9 @@ private String generateVersionName() {
 
 private Integer generateVersionCode() {
   20 * 10000 +
-      (ext.versionMajor * 10000) +
-      (ext.versionMinor * 100) +
-      (ext.versionPatch)
+    (ext.versionMajor * 10000) +
+    (ext.versionMinor * 100) +
+    (ext.versionPatch)
 }
 
 android {
@@ -226,21 +224,26 @@ android {
   testBuildType "debug"
 
   lintOptions {
-    // Treat lint seriously
     abortOnError true
-    // Hardcoded strings in xml
-    error "HardcodedText"
-    // Hardcoded strings in setText
-    error "SetTextI18n"
-    // Strings.xml issues
-    warning "ExtraTranslation"
-    warning "MissingTranslation"
+    checkAllWarnings true
+    warningsAsErrors true
 
-    // Warnings
-    warning "InvalidPackage"
-    warning "StringFormatInvalid"
+    ignore 'SyntheticAccessor',
+      //TODO stop ignoring below this
+      'MissingTranslation',
+      'CheckResult',
+      'LabelFor',
+      'DuplicateStrings',
+      'LogConditional'
+
+    warning 'UnknownNullness',
+      'SelectableText',
+      'IconDensities'
+    baseline file("lint-baseline.xml")
   }
+
   testOptions {
+    execution 'ANDROIDX_TEST_ORCHESTRATOR'
     unitTests.returnDefaultValues = true
     unitTests.all {
       useJUnitPlatform()
@@ -275,6 +278,9 @@ android {
 
     // Release Type
     release {
+      minifyEnabled true
+      shrinkResources true
+      proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
       signingConfig signingConfigs.release
       buildConfigField "String", "KIWIX_DOWNLOAD_URL", "\"http://mirror.download.kiwix.org/\""
       buildConfigField "boolean", "KIWIX_ERROR_ACTIVITY", "true"
@@ -409,15 +415,6 @@ android {
     javaMaxHeapSize "4g"
   }
 
-  /*
-  Add back once proguard is configured
-  buildTypes {
-    release {
-      minifyEnabled true
-      proguardFiles getDefaultProguardFile("proguard-android.txt")
-    }
-  }
-  */
   androidExtensions {
     experimental = true
   }
@@ -442,9 +439,9 @@ android {
       def baseAbiVersionCode = abiCodes.get(output.getFilter(OutputFile.ABI)) ?: 0
       def baseDensityVersionCode = densityCodes.get(output.getFilter(OutputFile.DENSITY)) ?: 1
       output.versionCodeOverride =
-          (baseDensityVersionCode * 10000000) +
-              (baseAbiVersionCode * 1000000) +
-              variant.versionCode
+        (baseDensityVersionCode * 10000000) +
+          (baseAbiVersionCode * 1000000) +
+          variant.versionCode
     }
   }
 }
@@ -455,6 +452,10 @@ play {
   track = "alpha"
   releaseStatus = "draft"
   resolutionStrategy = "fail"
+}
+
+ktlint {
+  android = true
 }
 
 class TestDroidUpload extends TestServer {
@@ -475,7 +476,7 @@ class TestDroidUpload extends TestServer {
       System.out.println(id)
       try {
         delegate.postResource(createUri(selfURI, "/files/" + id + "/share"),
-            [accessGroupId: accessGroup], APIProject.class)
+          [accessGroupId: accessGroup], APIProject.class)
       } catch (Exception e) {
         System.out.println(e.getLocalizedMessage())
       }
@@ -489,11 +490,16 @@ class TestDroidUpload extends TestServer {
     user.shareFile(testedId, accessGroup)
 
     new URL(RUNNER_GATEWAY + "?apk=" + testedId + "&test=" + testId + "&buildno=" + buildNumber).
-        getText()
+      getText()
   }
 
   @Override
   boolean isConfigured() {
     return true
   }
+}
+
+apply from: "${rootDir}/team-props/git-hooks.gradle"
+afterEvaluate {
+  tasks['preBuild'].dependsOn installGitHooks
 }

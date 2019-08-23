@@ -9,10 +9,8 @@ import javax.inject.Inject;
 import org.kiwix.kiwixmobile.base.BasePresenter;
 import org.kiwix.kiwixmobile.bookmark.BookmarkItem;
 import org.kiwix.kiwixmobile.data.DataSource;
-import org.kiwix.kiwixmobile.data.local.entity.Bookmark;
 import org.kiwix.kiwixmobile.di.PerActivity;
 import org.kiwix.kiwixmobile.history.HistoryListItem;
-import org.kiwix.kiwixmobile.library.entity.LibraryNetworkEntity;
 import org.kiwix.kiwixmobile.zim_manager.fileselect_view.adapter.BooksOnDiskListItem;
 
 /**
@@ -30,7 +28,7 @@ class MainPresenter extends BasePresenter<MainContract.View> implements MainCont
   }
 
   @Override
-  public void showHome() {
+  public void loadBooks() {
     dataSource.getLanguageCategorizedBooks()
         .subscribe(new SingleObserver<List<BooksOnDiskListItem>>() {
           @Override
@@ -61,7 +59,7 @@ class MainPresenter extends BasePresenter<MainContract.View> implements MainCont
 
           @Override
           public void onComplete() {
-            showHome();
+            loadBooks();
           }
 
           @Override
@@ -121,8 +119,8 @@ class MainPresenter extends BasePresenter<MainContract.View> implements MainCont
   }
 
   @Override
-  public void deleteBookmark(BookmarkItem bookmark) {
-    dataSource.deleteBookmark(bookmark)
+  public void deleteBookmark(String bookmarkUrl) {
+    dataSource.deleteBookmark(bookmarkUrl)
         .subscribe(new CompletableObserver() {
           @Override
           public void onSubscribe(Disposable d) {

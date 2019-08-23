@@ -20,6 +20,7 @@
 package org.kiwix.kiwixmobile.main;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.appwidget.AppWidgetManager;
 import android.content.ActivityNotFoundException;
@@ -37,7 +38,6 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
-import android.os.Environment;
 import android.os.Handler;
 import android.provider.Settings;
 import android.text.SpannableString;
@@ -84,10 +84,10 @@ import com.google.android.material.appbar.AppBarLayout;
 import com.google.android.material.floatingactionbutton.FloatingActionButton;
 import com.google.android.material.navigation.NavigationView;
 import com.google.android.material.snackbar.Snackbar;
+import io.reactivex.android.schedulers.AndroidSchedulers;
 import java.io.File;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -100,20 +100,18 @@ import org.kiwix.kiwixmobile.base.BaseActivity;
 import org.kiwix.kiwixmobile.bookmark.BookmarkItem;
 import org.kiwix.kiwixmobile.bookmark.BookmarksActivity;
 import org.kiwix.kiwixmobile.data.ZimContentProvider;
-import org.kiwix.kiwixmobile.data.local.entity.Bookmark;
 import org.kiwix.kiwixmobile.help.HelpActivity;
 import org.kiwix.kiwixmobile.history.HistoryActivity;
 import org.kiwix.kiwixmobile.history.HistoryListItem;
-import org.kiwix.kiwixmobile.library.entity.LibraryNetworkEntity;
 import org.kiwix.kiwixmobile.search.SearchActivity;
 import org.kiwix.kiwixmobile.settings.KiwixSettingsActivity;
 import org.kiwix.kiwixmobile.utils.DimenUtils;
 import org.kiwix.kiwixmobile.utils.LanguageUtils;
 import org.kiwix.kiwixmobile.utils.NetworkUtils;
 import org.kiwix.kiwixmobile.utils.StyleUtils;
-import org.kiwix.kiwixmobile.utils.files.FileSearch;
 import org.kiwix.kiwixmobile.utils.files.FileUtils;
 import org.kiwix.kiwixmobile.zim_manager.ZimManageActivity;
+import org.kiwix.kiwixmobile.zim_manager.fileselect_view.StorageObserver;
 import org.kiwix.kiwixmobile.zim_manager.fileselect_view.adapter.BookOnDiskDelegate;
 import org.kiwix.kiwixmobile.zim_manager.fileselect_view.adapter.BooksOnDiskAdapter;
 import org.kiwix.kiwixmobile.zim_manager.fileselect_view.adapter.BooksOnDiskListItem;
@@ -157,7 +155,7 @@ import static org.kiwix.kiwixmobile.utils.StyleUtils.dialogStyle;
 import static org.kiwix.kiwixmobile.utils.UpdateUtils.reformatProviderUrl;
 
 public class MainActivity extends BaseActivity implements WebViewCallback,
-    MainContract.View{
+    MainContract.View {
 
   private static final String NEW_TAB = "NEW_TAB";
   private static final String HOME_URL = "file:///android_asset/home.html";
@@ -201,14 +199,18 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
   ImageView bottomToolbarArrowBack;
   @BindView(R.id.bottom_toolbar_arrow_forward)
   ImageView bottomToolbarArrowForward;
-  @Inject
-  MainContract.Presenter presenter;
   @BindView(R.id.tab_switcher_recycler_view)
   RecyclerView tabRecyclerView;
   @BindView(R.id.activity_main_tab_switcher)
   View tabSwitcherRoot;
   @BindView(R.id.tab_switcher_close_all_tabs)
   FloatingActionButton closeAllTabsButton;
+
+  @Inject
+  MainContract.Presenter presenter;
+  @Inject
+  StorageObserver storageObserver;
+
   private CountDownTimer hideBackToTopTimer = new CountDownTimer(1200, 1200) {
     @Override
     public void onTick(long millisUntilFinished) {
@@ -274,21 +276,6 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
       closeTab(viewHolder.getAdapterPosition());
     }
   };
-  private FileSearch fileSearch =
-      new FileSearch(this, Collections.emptyList(), new FileSearch.ResultListener() {
-        final List<BooksOnDiskListItem.BookOnDisk> newBooks = new ArrayList<>();
-
-        @Override public void onBookFound(BooksOnDiskListItem.BookOnDisk bookOnDisk) {
-          runOnUiThread(() -> {
-              newBooks.add(bookOnDisk);
-          });
-        }
-
-        @Override
-        public void onScanCompleted() {
-          presenter.saveBooks(newBooks);
-        }
-      });
 
   private static void updateWidgets(Context context) {
     Intent intent = new Intent(context.getApplicationContext(), KiwixSearchWidget.class);
@@ -334,6 +321,7 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
     }
   }
 
+  @SuppressLint("ClickableViewAccessibility")
   @Override
   public void onCreate(Bundle savedInstanceState) {
     super.onCreate(savedInstanceState);
@@ -345,6 +333,15 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
     setContentView(R.layout.activity_main);
     setSupportActionBar(toolbar);
     actionBar = getSupportActionBar();
+
+    toolbar.setOnTouchListener(new OnSwipeTouchListener(this) {
+
+      @Override
+      @SuppressLint("SyntheticAccessor")
+      public void onSwipeBottom() {
+        showTabSwitcher();
+      }
+    });
 
     tableDrawerRight =
         tableDrawerRightContainer.getHeaderView(0).findViewById(R.id.right_drawer_list);
@@ -364,7 +361,24 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
 
     setupDocumentParser();
 
-    manageExternalLaunchAndRestoringViewState();
+    if (BuildConfig.IS_CUSTOM_APP) {
+      Log.d(TAG_KIWIX, "This is a custom app:" +BuildConfig.APPLICATION_ID);
+      if (loadCustomAppContent()) {
+        Log.d(TAG_KIWIX, "Found custom content, continuing...");
+        // Continue
+      } else {
+        Log.e(TAG_KIWIX, "Problem finding the content, no more OnCreate() code");
+        // What should we do here? exit? I'll investigate empirically.
+        // It seems unpredictable behaviour if the code returns at this point as yesterday
+        // it didn't crash yet today the app crashes because it tries to load books
+        // in onResume();
+      }
+
+    } else {
+
+      manageExternalLaunchAndRestoringViewState();
+    }
+
     loadPrefs();
     updateTitle();
 
@@ -372,12 +386,13 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
 
     wasHideToolbar = isHideToolbar;
     booksAdapter = new BooksOnDiskAdapter(
-       new BookOnDiskDelegate.BookDelegate(sharedPreferenceUtil,
-           bookOnDiskItem -> {
-             open(bookOnDiskItem);
-             return Unit.INSTANCE;
-           },
-           null),
+        new BookOnDiskDelegate.BookDelegate(sharedPreferenceUtil,
+            bookOnDiskItem -> {
+              open(bookOnDiskItem);
+              return Unit.INSTANCE;
+            },
+            null,
+            null),
         BookOnDiskDelegate.LanguageDelegate.INSTANCE
     );
 
@@ -586,7 +601,7 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
     ++tempVisitCount;
     visitCounterPref.setCount(tempVisitCount);
 
-    if (tempVisitCount >= 5
+    if (tempVisitCount >= 10
         && !visitCounterPref.getNoThanksState()
         && NetworkUtils.isNetworkAvailable(this) && !BuildConfig.DEBUG) {
       showRateDialog();
@@ -739,7 +754,6 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
     downloadBookButton = null;
     hideBackToTopTimer.cancel();
     hideBackToTopTimer = null;
-    fileSearch = null;
     // TODO create a base Activity class that class this.
     FileUtils.deleteCachedFiles(this);
     tts.shutdown();
@@ -859,14 +873,14 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
         break;
 
       case R.id.menu_add_note:
-        if(requestExternalStorageWritePermissionForNotes()) {
+        if (requestExternalStorageWritePermissionForNotes()) {
           // Check permission since notes are stored in the public-external storage
           showAddNoteDialog();
         }
         break;
 
       case R.id.menu_clear_notes:
-        if(requestExternalStorageWritePermissionForNotes()) { // Check permission since notes are stored in the public-external storage
+        if (requestExternalStorageWritePermissionForNotes()) { // Check permission since notes are stored in the public-external storage
           showClearAllNotesDialog();
         }
         break;
@@ -952,12 +966,13 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
   }
 
   /** Method to delete all user notes */
-  private void clearAllNotes() {
+  void clearAllNotes() {
 
     boolean result = true; // Result of all delete() calls is &&-ed to this variable
 
-    if(AddNoteDialog.isExternalStorageWritable()) {
-      if(ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+    if (AddNoteDialog.isExternalStorageWritable()) {
+      if (ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE)
+          != PackageManager.PERMISSION_GRANTED) {
         Log.d("MainActivity", "WRITE_EXTERNAL_STORAGE permission not granted");
         showToast(R.string.ext_storage_permission_not_granted, Toast.LENGTH_LONG);
         return;
@@ -968,17 +983,17 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
       File notesDirectory = new File(NOTES_DIRECTORY);
       File[] filesInNotesDirectory = notesDirectory.listFiles();
 
-      if(filesInNotesDirectory == null) { // Notes folder doesn't exist
+      if (filesInNotesDirectory == null) { // Notes folder doesn't exist
         showToast(R.string.notes_deletion_none_found, Toast.LENGTH_LONG);
         return;
       }
 
-      for(File wikiFileDirectory : filesInNotesDirectory) {
-        if(wikiFileDirectory.isDirectory()) {
+      for (File wikiFileDirectory : filesInNotesDirectory) {
+        if (wikiFileDirectory.isDirectory()) {
           File[] filesInWikiDirectory = wikiFileDirectory.listFiles();
 
-          for(File noteFile : filesInWikiDirectory) {
-            if(noteFile.isFile()) {
+          for (File noteFile : filesInWikiDirectory) {
+            if (noteFile.isFile()) {
               result = result && noteFile.delete();
             }
           }
@@ -987,10 +1002,11 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
         result = result && wikiFileDirectory.delete(); // Wiki specific notes directory deleted
       }
 
-      result = result && notesDirectory.delete(); // "{External Storage}/Kiwix/Notes" directory deleted
+      result =
+          result && notesDirectory.delete(); // "{External Storage}/Kiwix/Notes" directory deleted
     }
 
-    if(result) {
+    if (result) {
       showToast(R.string.notes_deletion_successful, Toast.LENGTH_SHORT);
     } else {
       showToast(R.string.notes_deletion_unsuccessful, Toast.LENGTH_SHORT);
@@ -1003,23 +1019,24 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
     Fragment previousInstance = getSupportFragmentManager().findFragmentByTag(AddNoteDialog.TAG);
 
     // To prevent multiple instances of the DialogFragment
-    if(previousInstance == null) {
+    if (previousInstance == null) {
       /* Since the DialogFragment is never added to the back-stack, so findFragmentByTag()
-      *  returning null means that the AddNoteDialog is currently not on display (as doesn't exist)
-      **/
+       *  returning null means that the AddNoteDialog is currently not on display (as doesn't exist)
+       **/
       AddNoteDialog dialogFragment = new AddNoteDialog(sharedPreferenceUtil);
-      dialogFragment.show(fragmentTransaction, AddNoteDialog.TAG); // For DialogFragments, show() handles the fragment commit and display
+      dialogFragment.show(fragmentTransaction, AddNoteDialog.TAG);
+      // For DialogFragments, show() handles the fragment commit and display
     }
   }
 
   private boolean requestExternalStorageWritePermissionForNotes() {
-    if(Build.VERSION.SDK_INT >= 23) { // For Marshmallow & higher API levels
+    if (Build.VERSION.SDK_INT >= 23) { // For Marshmallow & higher API levels
 
-      if(checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED) {
+      if (checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+          == PackageManager.PERMISSION_GRANTED) {
         return true;
-
       } else {
-        if(shouldShowRequestPermissionRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
+        if (shouldShowRequestPermissionRationale(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
           /* shouldShowRequestPermissionRationale() returns false when:
            *  1) User has previously checked on "Don't ask me again", and/or
            *  2) Permission has been disabled on device
@@ -1027,9 +1044,9 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
           showToast(R.string.ext_storage_permission_rationale_add_note, Toast.LENGTH_LONG);
         }
 
-        requestPermissions(new String[] {Manifest.permission.WRITE_EXTERNAL_STORAGE}, REQUEST_WRITE_STORAGE_PERMISSION_ADD_NOTE);
+        requestPermissions(new String[] { Manifest.permission.WRITE_EXTERNAL_STORAGE },
+            REQUEST_WRITE_STORAGE_PERMISSION_ADD_NOTE);
       }
-
     } else { // For Android versions below Marshmallow 6.0 (API 23)
       return true; // As already requested at install time
     }
@@ -1112,6 +1129,9 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
   }
 
   private void externalLinkPopup(Intent intent) {
+    int warningResId = (sharedPreferenceUtil.nightMode())
+      ? R.drawable.ic_warning_white : R.drawable.ic_warning_black;
+
     new AlertDialog.Builder(this, dialogStyle())
         .setTitle(R.string.external_link_popup_dialog_title)
         .setMessage(R.string.external_link_popup_dialog_message)
@@ -1125,7 +1145,7 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
           startActivity(intent);
         })
         .setPositiveButton(android.R.string.yes, (dialogInterface, i) -> startActivity(intent))
-        .setIcon(android.R.drawable.ic_dialog_alert)
+        .setIcon(warningResId)
         .show();
   }
 
@@ -1199,7 +1219,7 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
       case REQUEST_READ_STORAGE_PERMISSION: {
         if (grantResults.length > 0
             && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-          fileSearch.scan(sharedPreferenceUtil.getPrefStorage());
+          scanStorageForZims();
         } else {
           Snackbar.make(drawerLayout, R.string.request_storage, Snackbar.LENGTH_LONG)
               .setAction(R.string.menu_settings, view -> {
@@ -1215,17 +1235,24 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
 
       case REQUEST_WRITE_STORAGE_PERMISSION_ADD_NOTE: {
 
-        if(grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+        if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
           // Successfully granted permission, so opening the note keeper
           showAddNoteDialog();
-
         } else {
-          Toast.makeText(getApplicationContext(), getString(R.string.ext_storage_write_permission_denied_add_note), Toast.LENGTH_LONG);
+          Toast.makeText(getApplicationContext(),
+              getString(R.string.ext_storage_write_permission_denied_add_note), Toast.LENGTH_LONG);
         }
 
         break;
       }
     }
+  }
+
+  private void scanStorageForZims() {
+    storageObserver.getBooksOnFileSystem()
+        .take(1)
+        .observeOn(AndroidSchedulers.mainThread())
+        .subscribe(presenter::saveBooks, Throwable::printStackTrace);
   }
 
   // Workaround for popup bottom menu on older devices
@@ -1333,16 +1360,15 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
     //Check maybe need refresh
     String articleUrl = getCurrentWebView().getUrl();
     boolean isBookmark = false;
-    BookmarkItem bookmark = BookmarkItem.fromZimContentProvider(getCurrentWebView().getTitle(),articleUrl);
     if (articleUrl != null && !bookmarks.contains(articleUrl)) {
       if (ZimContentProvider.getId() != null) {
-        presenter.saveBookmark(bookmark);
+        presenter.saveBookmark( BookmarkItem.fromZimContentProvider(getCurrentWebView().getTitle(), articleUrl));
       } else {
         Toast.makeText(this, R.string.unable_to_add_to_bookmarks, Toast.LENGTH_SHORT).show();
       }
       isBookmark = true;
     } else if (articleUrl != null) {
-      presenter.deleteBookmark(bookmark);
+      presenter.deleteBookmark(articleUrl);
       isBookmark = false;
     }
     popBookmarkSnackbar(isBookmark);
@@ -1395,6 +1421,7 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
       webViewList.get(currentWebViewIndex).findViewById(R.id.get_content_card).setEnabled(true);
     }
     updateBottomToolbarVisibility();
+    presenter.loadBooks();
 
     Log.d(TAG_KIWIX, "action" + getIntent().getAction());
     Intent intent = getIntent();
@@ -1448,12 +1475,11 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
 
   private void updateBottomToolbarVisibility() {
     if (checkNull(bottomToolbar)) {
-      if (sharedPreferenceUtil.getPrefBottomToolbar() && !HOME_URL.equals(
+      if (!HOME_URL.equals(
           getCurrentWebView().getUrl())
           && tabSwitcherRoot.getVisibility() != View.VISIBLE) {
         bottomToolbar.setVisibility(View.VISIBLE);
-        if (getCurrentWebView() instanceof ToolbarStaticKiwixWebView
-            && sharedPreferenceUtil.getPrefBottomToolbar()) {
+        if (getCurrentWebView() instanceof ToolbarStaticKiwixWebView) {
           contentFrame.setPadding(0, 0, 0,
               (int) getResources().getDimension(R.dimen.bottom_toolbar_height));
         } else {
@@ -1865,6 +1891,74 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
     }
   }
 
+  /**
+   * loadCustomAppContent  Return true if all's well, else false.
+   */
+  private boolean loadCustomAppContent() {
+      Log.d(TAG_KIWIX, "Kiwix Custom App starting for the first time. Checking Companion ZIM: "
+        + BuildConfig.ZIM_FILE_NAME);
+
+      String currentLocaleCode = Locale.getDefault().toString();
+      // Custom App recommends to start off a specific language
+      if (BuildConfig.ENFORCED_LANG.length() > 0 && !BuildConfig.ENFORCED_LANG
+        .equals(currentLocaleCode)) {
+
+        // change the locale machinery
+        LanguageUtils.handleLocaleChange(this, BuildConfig.ENFORCED_LANG);
+
+        // save new locale into preferences for next startup
+        sharedPreferenceUtil.putPrefLanguage(BuildConfig.ENFORCED_LANG);
+
+        // restart activity for new locale to take effect
+        this.setResult(1236);
+        this.finish();
+        this.startActivity(new Intent(this, this.getClass()));
+        return false;
+      }
+
+      String filePath = "";
+      if (BuildConfig.HAS_EMBEDDED_ZIM) {
+        String appPath = getPackageResourcePath();
+        File libDir = new File(appPath.substring(0, appPath.lastIndexOf("/")) + "/lib/");
+        if (libDir.exists() && libDir.listFiles().length > 0) {
+          filePath = libDir.listFiles()[0].getPath() + "/" + BuildConfig.ZIM_FILE_NAME;
+        }
+        if (filePath.isEmpty() || !new File(filePath).exists()) {
+          filePath = String.format("/data/data/%s/lib/%s", BuildConfig.APPLICATION_ID,
+            BuildConfig.ZIM_FILE_NAME);
+        }
+      } else {
+        String fileName = FileUtils.getExpansionAPKFileName(true);
+        filePath = FileUtils.generateSaveFileName(fileName);
+      }
+
+      Log.d(TAG_KIWIX, "BuildConfig.ZIM_FILE_SIZE = " + BuildConfig.ZIM_FILE_SIZE);
+      if (!FileUtils.doesFileExist(filePath, BuildConfig.ZIM_FILE_SIZE, false)) {
+
+        AlertDialog.Builder zimFileMissingBuilder =
+          new AlertDialog.Builder(this, dialogStyle());
+        zimFileMissingBuilder.setTitle(R.string.app_name);
+        zimFileMissingBuilder.setMessage(R.string.customapp_missing_content);
+        zimFileMissingBuilder.setIcon(R.mipmap.kiwix_icon);
+        final Activity activity = this;
+        zimFileMissingBuilder.setPositiveButton(getString(R.string.go_to_play_store),
+          (dialog, which) -> {
+            String market_uri = "market://details?id=" + BuildConfig.APPLICATION_ID;
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setData(Uri.parse(market_uri));
+            startActivity(intent);
+            activity.finish();
+          });
+        zimFileMissingBuilder.setCancelable(false);
+        AlertDialog zimFileMissingDialog = zimFileMissingBuilder.create();
+        zimFileMissingDialog.show();
+        return false;
+      } else {
+        openZimFile(new File(filePath), true);
+        return true;
+      }
+  }
+
   private void manageExternalLaunchAndRestoringViewState() {
 
     if (getIntent().getData() != null) {
@@ -1891,71 +1985,10 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
         // Alternative would be to restore webView state. But more effort to implement, and actually
         // fits better normal android behavior if after closing app ("back" button) state is not maintained.
       } else {
-
-        if (BuildConfig.IS_CUSTOM_APP) {
-          Log.d(TAG_KIWIX, "Kiwix Custom App starting for the first time. Checking Companion ZIM: "
-              + BuildConfig.ZIM_FILE_NAME);
-
-          String currentLocaleCode = Locale.getDefault().toString();
-          // Custom App recommends to start off a specific language
-          if (BuildConfig.ENFORCED_LANG.length() > 0 && !BuildConfig.ENFORCED_LANG
-              .equals(currentLocaleCode)) {
-
-            // change the locale machinery
-            LanguageUtils.handleLocaleChange(this, BuildConfig.ENFORCED_LANG);
-
-            // save new locale into preferences for next startup
-            sharedPreferenceUtil.putPrefLanguage(BuildConfig.ENFORCED_LANG);
-
-            // restart activity for new locale to take effect
-            this.setResult(1236);
-            this.finish();
-            this.startActivity(new Intent(this, this.getClass()));
-          }
-
-          String filePath = "";
-          if (BuildConfig.HAS_EMBEDDED_ZIM) {
-            String appPath = getPackageResourcePath();
-            File libDir = new File(appPath.substring(0, appPath.lastIndexOf("/")) + "/lib/");
-            if (libDir.exists() && libDir.listFiles().length > 0) {
-              filePath = libDir.listFiles()[0].getPath() + "/" + BuildConfig.ZIM_FILE_NAME;
-            }
-            if (filePath.isEmpty() || !new File(filePath).exists()) {
-              filePath = String.format("/data/data/%s/lib/%s", BuildConfig.APPLICATION_ID,
-                  BuildConfig.ZIM_FILE_NAME);
-            }
-          } else {
-            String fileName = FileUtils.getExpansionAPKFileName(true);
-            filePath = FileUtils.generateSaveFileName(fileName);
-          }
-
-          if (!FileUtils.doesFileExist(filePath, BuildConfig.ZIM_FILE_SIZE, false)) {
-
-            AlertDialog.Builder zimFileMissingBuilder =
-                new AlertDialog.Builder(this, dialogStyle());
-            zimFileMissingBuilder.setTitle(R.string.app_name);
-            zimFileMissingBuilder.setMessage(R.string.customapp_missing_content);
-            zimFileMissingBuilder.setIcon(R.mipmap.kiwix_icon);
-            final Activity activity = this;
-            zimFileMissingBuilder.setPositiveButton(getString(R.string.go_to_play_store),
-                (dialog, which) -> {
-                  String market_uri = "market://details?id=" + BuildConfig.APPLICATION_ID;
-                  Intent intent = new Intent(Intent.ACTION_VIEW);
-                  intent.setData(Uri.parse(market_uri));
-                  startActivity(intent);
-                  activity.finish();
-                });
-            zimFileMissingBuilder.setCancelable(false);
-            AlertDialog zimFileMissingDialog = zimFileMissingBuilder.create();
-            zimFileMissingDialog.show();
-          } else {
-            openZimFile(new File(filePath), true);
-          }
-        } else {
           Log.d(TAG_KIWIX, "Kiwix normal start, no zimFile loaded last time  -> display home page");
           showHomePage();
         }
-      }
+
     }
   }
 
@@ -1985,7 +2018,8 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
     String url = getCurrentWebView().getUrl();
     if (url != null && !url.equals(HOME_URL)) {
       final long timeStamp = System.currentTimeMillis();
-      SimpleDateFormat sdf = new SimpleDateFormat("d MMM yyyy", LanguageUtils.getCurrentLocale(this));
+      SimpleDateFormat sdf =
+          new SimpleDateFormat("d MMM yyyy", LanguageUtils.getCurrentLocale(this));
       HistoryListItem.HistoryItem history = new HistoryListItem.HistoryItem(
           0L,
           ZimContentProvider.getId(),
@@ -2089,7 +2123,7 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
   @Override
   public void setHomePage(View view) {
     RecyclerView homeRecyclerView = view.findViewById(R.id.recycler_view);
-    presenter.showHome();
+    presenter.loadBooks();
     homeRecyclerView.setAdapter(booksAdapter);
     downloadBookButton = view.findViewById(R.id.content_main_card_download_button);
     downloadBookButton.setOnClickListener(v -> manageZimFiles(1));
@@ -2105,7 +2139,7 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
 
   @Override
   public void addBooks(List<BooksOnDiskListItem> books) {
-    booksAdapter.setItemList(books);
+    booksAdapter.setItems(books);
   }
 
   private void searchFiles() {
@@ -2116,7 +2150,7 @@ public class MainActivity extends BaseActivity implements WebViewCallback,
           new String[] { Manifest.permission.READ_EXTERNAL_STORAGE },
           REQUEST_READ_STORAGE_PERMISSION);
     } else {
-      fileSearch.scan(sharedPreferenceUtil.getPrefStorage());
+      scanStorageForZims();
     }
   }
 

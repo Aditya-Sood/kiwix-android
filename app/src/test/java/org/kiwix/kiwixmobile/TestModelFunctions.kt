@@ -21,17 +21,39 @@ import org.kiwix.kiwixmobile.downloader.model.DownloadModel
 import org.kiwix.kiwixmobile.downloader.model.DownloadState
 import org.kiwix.kiwixmobile.downloader.model.DownloadState.Pending
 import org.kiwix.kiwixmobile.downloader.model.DownloadStatus
+import org.kiwix.kiwixmobile.language.adapter.LanguageListItem.LanguageItem
 import org.kiwix.kiwixmobile.library.entity.LibraryNetworkEntity.Book
+import org.kiwix.kiwixmobile.zim_manager.Language
 import org.kiwix.kiwixmobile.zim_manager.fileselect_view.adapter.BooksOnDiskListItem.BookOnDisk
 import java.io.File
 
 fun bookOnDisk(
   book: Book = book(),
-  databaseId: Long = 0L,
+  databaseId: Long? = 0L,
   file: File = File("")
 ) = BookOnDisk(databaseId, book, file)
 
-fun book(id: String = "0") = Book().apply { this.id = id }
+fun book(
+  id: String = "0",
+  title: String = "",
+  size: String = "",
+  favicon: String = "",
+  creator: String = "",
+  publisher: String = "",
+  date: String = "",
+  description: String = "",
+  language: String = ""
+) = Book().apply {
+  this.id = id
+  this.title = title
+  this.size = size
+  this.favicon = favicon
+  this.creator = creator
+  this.publisher = publisher
+  this.date = date
+  this.description = description
+  this.language = language
+}
 
 fun downloadStatus(
   downloadId: Long = 0L,
@@ -47,8 +69,8 @@ fun downloadStatus(
   uri: String? = null,
   book: Book = book()
 ) = DownloadStatus(
-    downloadId, title, description, downloadState, bytesDownloadedSoFar,
-    totalSizeBytes, lastModified, localUri, mediaProviderUri, mediaType, uri, book
+  downloadId, title, description, downloadState, bytesDownloadedSoFar,
+  totalSizeBytes, lastModified, localUri, mediaProviderUri, mediaType, uri, book
 )
 
 fun downloadModel(
@@ -56,3 +78,19 @@ fun downloadModel(
   downloadId: Long = 1L,
   book: Book = book()
 ) = DownloadModel(databaseId, downloadId, book)
+
+fun language(
+  id: Long = 0,
+  isActive: Boolean = false,
+  occurencesOfLanguage: Int = 0,
+  language: String = "",
+  languageLocalized: String = "",
+  languageCode: String = "",
+  languageCodeISO2: String = ""
+) = Language(
+  id, isActive, occurencesOfLanguage, language, languageLocalized, languageCode,
+  languageCodeISO2
+)
+
+fun languageItem(language: Language = language()) =
+  LanguageItem(language)

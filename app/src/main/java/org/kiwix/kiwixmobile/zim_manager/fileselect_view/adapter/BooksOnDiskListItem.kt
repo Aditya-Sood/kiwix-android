@@ -6,6 +6,7 @@ import java.io.File
 import java.util.Locale
 
 sealed class BooksOnDiskListItem {
+  var isSelected: Boolean = false
   abstract val id: Long
 
   data class LanguageItem constructor(
@@ -13,8 +14,8 @@ sealed class BooksOnDiskListItem {
     val text: String
   ) : BooksOnDiskListItem() {
     constructor(locale: Locale) : this(
-        locale.language.hashCode().toLong(),
-        locale.getDisplayLanguage(locale)
+      locale.language.hashCode().toLong(),
+      locale.getDisplayLanguage(locale)
     )
   }
 
@@ -30,10 +31,9 @@ sealed class BooksOnDiskListItem {
     }
 
     constructor(bookOnDiskEntity: BookOnDiskEntity) : this(
-        bookOnDiskEntity.id,
-        bookOnDiskEntity.toBook(),
-        bookOnDiskEntity.file
+      bookOnDiskEntity.id,
+      bookOnDiskEntity.toBook(),
+      bookOnDiskEntity.file
     )
   }
-
 }

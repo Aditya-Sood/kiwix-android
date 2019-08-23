@@ -18,10 +18,12 @@
 package org.kiwix.kiwixmobile.downloader.model
 
 import org.kiwix.kiwixmobile.library.entity.LibraryNetworkEntity.Book
+import org.kiwix.kiwixmobile.utils.StorageUtils
 
 data class DownloadModel(
   val databaseId: Long? = null,
-  val downloadId: Long ,
+  val downloadId: Long,
   val book: Book
-)
-
+) {
+  val fileNameFromUrl: String get() = StorageUtils.getFileNameFromUrl(book.url)
+}

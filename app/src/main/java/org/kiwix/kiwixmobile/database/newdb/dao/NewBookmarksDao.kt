@@ -27,27 +27,25 @@ import javax.inject.Inject
 
 class NewBookmarksDao @Inject constructor(val box: Box<BookmarkEntity>) {
   fun getBookmarks(fromCurrentBook: Boolean): List<BookmarkItem> {
-    return box
-        .query {
-          if (fromCurrentBook) {
-            equal(BookmarkEntity_.zimId, ZimContentProvider.getId() ?: "")
-          }
-          order(BookmarkEntity_.bookmarkTitle)
-        }
-        .find()
-        .map { BookmarkItem(it) }
+    return box.query {
+      if (fromCurrentBook) {
+        equal(BookmarkEntity_.zimId, ZimContentProvider.getId() ?: "")
+      }
+      order(BookmarkEntity_.bookmarkTitle)
+    }.find()
+      .map(::BookmarkItem)
   }
 
   fun getCurrentZimBookmarksUrl() = box.query {
     equal(BookmarkEntity_.zimId, ZimContentProvider.getId() ?: "")
-        .or()
-        .equal(BookmarkEntity_.zimName, ZimContentProvider.getName() ?: "")
+      .or()
+      .equal(BookmarkEntity_.zimName, ZimContentProvider.getName() ?: "")
     order(BookmarkEntity_.bookmarkTitle)
   }
-      .property(BookmarkEntity_.bookmarkUrl)
-      .findStrings()
-      .toList()
-      .distinct()
+    .property(BookmarkEntity_.bookmarkUrl)
+    .findStrings()
+    .toList()
+    .distinct()
 
   fun saveBookmark(bookmarkItem: BookmarkItem) {
     box.put(BookmarkEntity(bookmarkItem))
@@ -57,7 +55,9 @@ class NewBookmarksDao @Inject constructor(val box: Box<BookmarkEntity>) {
     box.remove(bookmarks.map(::BookmarkEntity))
   }
 
-  fun deleteBookmark(bookmark: BookmarkItem) {
-    box.remove(BookmarkEntity(bookmark))
+  fun deleteBookmark(bookmarkUrl: String) {
+    box.query {
+      equal(BookmarkEntity_.bookmarkUrl, bookmarkUrl)
+    }.remove()
   }
 }

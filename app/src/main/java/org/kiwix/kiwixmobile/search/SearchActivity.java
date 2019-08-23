@@ -100,6 +100,7 @@ public class SearchActivity extends BaseActivity
     }
 
     Log.d("SearchActivity", "###############In search activity");
+    Toast.makeText(this, "In updated code", Toast.LENGTH_LONG).show();
   }
 
   public void activateDefaultAdapter() {

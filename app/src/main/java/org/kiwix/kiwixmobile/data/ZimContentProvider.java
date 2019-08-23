@@ -253,7 +253,12 @@ public class ZimContentProvider extends ContentProvider {
     } else {
       JNIKiwixString title = new JNIKiwixString();
       JNIKiwixString url = new JNIKiwixString();
-      if (currentJNIReader.getNextSuggestion(title, url)) {
+      if (currentJNIReader.getNextSuggestion(title)) {
+        return title.value;
+      } else {
+        return null;
+      }
+      /*if (currentJNIReader.getNextSuggestion(title, url)) {
         if(url.value != null)
           return url.value;
         else
@@ -261,7 +266,7 @@ public class ZimContentProvider extends ContentProvider {
 
       } else {
         return null;
-      }
+      }*/
     }
   }
 

@@ -292,6 +292,7 @@ android {
 
     // Main build type for debugging
     debug {
+      isDefault = false
       multiDexKeepProguard file("multidex-instrumentation-config.pro")
       buildConfigField "String", "KIWIX_DOWNLOAD_URL", "\"http://mirror.download.kiwix.org/\""
       buildConfigField "boolean", "KIWIX_ERROR_ACTIVITY", "false"

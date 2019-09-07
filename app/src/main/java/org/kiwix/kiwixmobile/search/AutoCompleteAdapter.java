@@ -19,13 +19,17 @@ package org.kiwix.kiwixmobile.search;
 
 import android.content.Context;
 import android.text.Html;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Filter;
 import android.widget.Filterable;
 import android.widget.TextView;
+import android.widget.Toast;
+
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import javax.inject.Inject;
 import org.kiwix.kiwixlib.JNIKiwix;
@@ -118,13 +122,20 @@ public class AutoCompleteAdapter extends ArrayAdapter<String> implements Filtera
             ZimContentProvider.searchSuggestions(query, 200);
             String suggestion;
             String suggestionUrl;
+            HashMap<String, String> results;
             List<String> alreadyAdded = new ArrayList<>();
             /** Possibly, instead of getting Url from Title, want to return url from NextSuggestion itself*/
-            while ((suggestion = ZimContentProvider.getNextSuggestion()) != null) {
-              if(suggestion.endsWith(".html"))
+            while ((results = ZimContentProvider.getNextSuggestion()) != null) {
+              /*if(suggestion.endsWith(".html")) {
+                Log.d("AUTOCOMPLETEADAPTER", "!!!!!!!!!!!Using suggestion: " + suggestion);
                 suggestionUrl = suggestion;
-              else
+              }
+              else {
                 suggestionUrl = ZimContentProvider.getPageUrlFromTitle(suggestion);
+              }*/
+
+              suggestion = results.get("title");
+              suggestionUrl = results.get("url");
 
               if (!alreadyAdded.contains(suggestionUrl)) {
                 alreadyAdded.add(suggestionUrl);

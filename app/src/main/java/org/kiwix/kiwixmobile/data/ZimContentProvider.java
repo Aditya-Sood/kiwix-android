@@ -37,6 +37,7 @@ import java.io.OutputStream;
 import java.io.RandomAccessFile;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.inject.Inject;
@@ -247,26 +248,30 @@ public class ZimContentProvider extends ContentProvider {
     }
   }*/
 
-  public static String getNextSuggestion() {
+  public static HashMap<String, String> getNextSuggestion() {
     if (currentJNIReader == null || zimFileName == null) {
       return null;
     } else {
       JNIKiwixString title = new JNIKiwixString();
       JNIKiwixString url = new JNIKiwixString();
-      if (currentJNIReader.getNextSuggestion(title)) {
-        return title.value;
-      } else {
-        return null;
-      }
-      /*if (currentJNIReader.getNextSuggestion(title, url)) {
-        if(url.value != null)
+      if (currentJNIReader.getNextSuggestion(title, url)) {
+        HashMap<String, String> results = new HashMap<>();
+        results.put("title", title.value);
+        results.put("url", url.value);
+
+        return results;
+        /*if(url.value != null) {
+          Log.d("ZIMCONTENT", "!!!!!!!!Returning url");
           return url.value;
-        else
+        }
+        else {
+          Log.d("ZIMCONTENT", "!!!!!!!!Returning title");
           return title.value;
+        }*/
 
       } else {
         return null;
-      }*/
+      }
     }
   }
 

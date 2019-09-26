@@ -124,16 +124,7 @@ public class AutoCompleteAdapter extends ArrayAdapter<String> implements Filtera
             String suggestionUrl;
             HashMap<String, String> results;
             List<String> alreadyAdded = new ArrayList<>();
-            /** Possibly, instead of getting Url from Title, want to return url from NextSuggestion itself*/
             while ((results = ZimContentProvider.getNextSuggestion()) != null) {
-              /*if(suggestion.endsWith(".html")) {
-                Log.d("AUTOCOMPLETEADAPTER", "!!!!!!!!!!!Using suggestion: " + suggestion);
-                suggestionUrl = suggestion;
-              }
-              else {
-                suggestionUrl = ZimContentProvider.getPageUrlFromTitle(suggestion);
-              }*/
-
               suggestion = results.get("title");
               suggestionUrl = results.get("url");
 

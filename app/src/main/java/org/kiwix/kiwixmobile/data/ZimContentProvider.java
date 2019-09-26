@@ -28,6 +28,9 @@ import android.os.ParcelFileDescriptor;
 import android.os.ParcelFileDescriptor.AutoCloseOutputStream;
 import android.util.Log;
 import android.webkit.MimeTypeMap;
+
+import androidx.annotation.Nullable;
+
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -235,20 +238,7 @@ public class ZimContentProvider extends ContentProvider {
     }
   }
 
-  /*public static String getNextSuggestion() {
-    if (currentJNIReader == null || zimFileName == null) {
-      return null;
-    } else {
-      JNIKiwixString title = new JNIKiwixString();
-      if (currentJNIReader.getNextSuggestion(title)) {
-        return title.value;
-      } else {
-        return null;
-      }
-    }
-  }*/
-
-  public static HashMap<String, String> getNextSuggestion() {
+  public static @Nullable HashMap<String, String> getNextSuggestion() {
     if (currentJNIReader == null || zimFileName == null) {
       return null;
     } else {
@@ -258,17 +248,7 @@ public class ZimContentProvider extends ContentProvider {
         HashMap<String, String> results = new HashMap<>();
         results.put("title", title.value);
         results.put("url", url.value);
-
         return results;
-        /*if(url.value != null) {
-          Log.d("ZIMCONTENT", "!!!!!!!!Returning url");
-          return url.value;
-        }
-        else {
-          Log.d("ZIMCONTENT", "!!!!!!!!Returning title");
-          return title.value;
-        }*/
-
       } else {
         return null;
       }

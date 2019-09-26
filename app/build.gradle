@@ -148,7 +148,7 @@ dependencies {
 }
 
 private boolean shouldUseLocalVersion() {
-  file("/mnt/1800D5F100D5D5BA/Mamba/Kiwix/kiwix-android/app/libs/kiwixLibAndroid-release.aar").exists()
+  file("./libs").exists()
 }
 
 // Set custom app import directory

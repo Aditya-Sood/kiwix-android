@@ -98,9 +98,6 @@ public class SearchActivity extends BaseActivity
     if (IS_VOICE_SEARCH_INTENT) {
       promptSpeechInput();
     }
-
-    Log.d("SearchActivity", "###############In search activity");
-    Toast.makeText(this, "In updated code", Toast.LENGTH_LONG).show();
   }
 
   public void activateDefaultAdapter() {
